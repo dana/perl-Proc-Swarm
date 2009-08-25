@@ -1,0 +1,12 @@
+lib/Proc/Swarm.pm
+MANIFEST
+docs/classes.txt
+t/loadme.t
+t/call.t
+t/error.t
+t/sort.t
+t/heavyload.t
+t/time.t
+Makefile.PL
+README
+Changes
