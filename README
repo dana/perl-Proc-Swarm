@@ -7,37 +7,36 @@ VERSION
     2001
 
 SYNOPSIS
-            use Proc::Swarm;
+        use Proc::Swarm;
 
-            my $code = sub {
-                    my $arg = shift;
-                    sleep($arg);
-                    $arg++;
-                    return($arg);
-            };
+        my $code = sub {
+            my $arg = shift;
+            sleep($arg);
+            $arg++;
+            return($arg);
+        };
 
-            my $retvals = Proc::Swarm::swarm(
-                    {       'code' => $code,        #code to run
+        my $retvals = Proc::Swarm::swarm({
+            code     => $code,        #code to run
+            children => 2,            #How many child processes to run parallel
+            sort     => 1,            #sort the results
+            work     => [1,5,7,10]
+        }); #List of objects to work on
 
-							#How many child processes to run parallel
-                            'children' => 2,        
+        my @results = $retvals->get_result_objects;
+        #@results contain 2, 6, 8 and 11, in numeric order.
 
-                            'sort' => 1,            #sort the results
-                            'work' => [1,5,7,10]}); #List of objects to work on
-            my @results = $retvals->get_result_objects;
-            #@results contain 2, 6, 8 and 11, in numeric order.
+        my @run_times = $retvals->get_result_times;
+        #how long each took to run.  Should contain something like 1,5,7 and 10
 
-            my @run_times = $retvals->get_result_times;
-            #how long each took to run.  Should contain something like 1,5,7 and 10
+        my @objects = $retvals->get_objects;
+        #The objects passed in.  Should contain 1,5,7 and 10
 
-            my @objects = $retvals->get_objects;
-            #The objects passed in.  Should contain 1,5,7 and 10
+        my $specific_result = $retvals->get_result(10); 
+        #Get specific result as keyed by passed object: 11 in this case.
 
-            my $specific_result = $retvals->get_result(10); 
-            #Get specific result as keyed by passed object: 11 in this case.
-
-            my $specific_return_value = $retvals->get_result(5)->get_runtime;
-            #Returns how long it took to run object 5.
+        my $specific_return_value = $retvals->get_result(5)->get_runtime;
+        #Returns how long it took to run object 5.
 
 DESCRIPTION
     This module provides some fairly fine control over heavy-duty
@@ -63,7 +62,7 @@ TODO
     Make the timing of each run optionally calculated with HiRes.
 
 AUTHOR
-    Dana M. Diederich <dana@realms.org>
+    Dana M. Diederich <diederich@gmail.com>
 
 BUGS
     The sort option sorts under the assumption that there is a one to one
