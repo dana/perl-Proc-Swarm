@@ -1,359 +1,363 @@
 #!/usr/bin/perl
 
-use IPC::Msg;
-use Storable;
 
 package Proc::Swarm;
 
-$VERSION = '1.0';
+use strict;use warnings;
+use IPC::Msg;
+use Storable;
+
+our $VERSION = '1.0';
 
 
 sub
 _usage {
-	print @_ . "\n" if defined @_;
-	print q
-Proc::Swarm::swarm(	'code' => $coderef,
-			'children' => $child_count,
-			'work' => \@work_units,
-			['sort' => 1],
-			['debug' => 1] );
-
+    print @_ . "\n" if defined @_;
+    print q
+Proc::Swarm::swarm(
+    code     => $coderef,
+    children => $child_count,
+    work     => \@work_units,
+    [sort => 1],
+    [debug => 1] );
 ;
+    exit 255;
 }
 
 sub
 swarm {
-	my $args = shift;
-	if(ref($args) ne 'HASH') {
-		&_usage;
-	}
-	my $coderef = $args->{'code'};
-	my $max_children = $args->{'children'};
-	my @units = @{$args->{'work'}};
-	my $sort_output = $args->{'sort'};
-	my $sort_code = $args->{'sort_code'};
+    my $args = shift;
+    _usage() if ref($args) ne 'HASH';
+    my $coderef = $args->{code};
+    my $max_children = $args->{children};
+    my @units = @{$args->{work}};
+    my $sort_output = $args->{sort};
+    my $sort_code = $args->{sort_code};
 
-	my @work_units = @units;
-	if((scalar @work_units) == 0) {
-		&_usage("No work defined");
-	}
+    my @work_units = @units;
+    _usage('No work defined') if (scalar @work_units) == 0;
 
-	&_usage("Invalid code passed") unless ref($coderef) eq 'CODE';
-	&_usage("Child count argument must be a non-negative, non-zero integer") if(($max_children < 1) or ($max_children =~ /\./));
-	&_usage("Work units must not contain a reference\n") if(ref($work_units[0]));
+    _usage('Invalid code passed') unless ref($coderef) eq 'CODE';
+    _usage('Child count argument must be a non-negative, non-zero integer')
+        if $max_children < 1 or $max_children =~ /\./;
+    _usage('Work units must not contain a reference')
+        if ref $work_units[0];
 
-	#We now have something like clean arguments.
+    #We now have something like clean arguments.
 
-	#We need two message queues.  One that the producer listens to, and
-	#another the consumer listens to.  
+    #We need two message queues.  One that the producer listens to, and
+    #another the consumer listens to.  
 
-	my $Qc = new Proc::Swarm::Queue;	#consumer
-	my $Qp = new Proc::Swarm::Queue;	#producer
+    my $Qc = Proc::Swarm::Queue->new;    #consumer
+    my $Qp = Proc::Swarm::Queue->new;    #producer
 
-	#The main parent is the consumer.  It will exit last.
-	#The first child is the producer.
-	my $pid = fork();
-	if(!defined($pid)) {	#fork failed
-		die "Fork failed.  Check your system resources.";
-	} elsif(!$pid) {	#Child	(producer)
-		my $worker_count = 0;
-		my $another_count = 0;
-		#first we spin off enough children to max out the count.
-		foreach (1..$max_children) {
-			&_worker(pop(@work_units), $coderef, $Qc);
-			$worker_count++;
-		}
+    #The main parent is the consumer.  It will exit last.
+    #The first child is the producer.
+    my $pid = fork();
+    if(!defined($pid)) {    #fork failed
+        die 'Fork failed.  Check your system resources.';
+    } elsif(!$pid) {    #Child    (producer)
+        my $worker_count = 0;
+        my $another_count = 0;
+        #first we spin off enough children to max out the count.
+        for (1..$max_children) {
+            _worker(pop(@work_units), $coderef, $Qc);
+            $worker_count++;
+        }
 
-		#Now we should have $max_children processes.  Wait for them
-		#to finish.
-		while(1) {
-			#We are expecting one of:
-			# requests to spawn another worker from the consumer
-			# requests from workers to add objects to work list
-			# requests from workers to remove objects from work list
-			
-			my $package = $Qp->receive;
-			if($package->get_type eq 'another') {
-				$another_count++;
-				if($another_count == $worker_count) {
-					#We are now done.
-						$Qc->send(
-		Proc::Swarm::Package->new(undef, 'end'));
-					exit;
-				}
-		
-				if((scalar @work_units) != 0) {
-					&_worker(pop(@work_units), $coderef, $Qc);
-					$worker_count++;
-				}
-			} elsif($package->get_type eq 'del') {
-				#find $package->get_object in @work_units and
-				#remove it
-				my @work_units_tmp;
-				foreach my $work_object (@work_units) {
-					push(@new_work_units, $work_object) unless
-						$work_object eq $package->get_object;
-				}
-				undef(@work_units);
-				foreach (@new_work_units) { push(@work_units, $_); }
+        #Now we should have $max_children processes.  Wait for them
+        #to finish.
+        while(1) {
+            #We are expecting one of:
+            # requests to spawn another worker from the consumer
+            # requests from workers to add objects to work list
+            # requests from workers to remove objects from work list
+            
+            my $package = $Qp->receive;
+            if($package->get_type eq 'another') {
+                $another_count++;
+                if($another_count == $worker_count) {
+                    #We are now done.
+                    $Qc->send(
+                        Proc::Swarm::Package->new(undef, 'end')
+                    );
+                    exit;
+                }
+        
+                if((scalar @work_units) != 0) {
+                    _worker(pop(@work_units), $coderef, $Qc);
+                    $worker_count++;
+                }
+            } elsif($package->get_type eq 'del') {
+                #find $package->get_object in @work_units and
+                #remove it
+                my @work_units_tmp;
+                my @new_work_units;
+                foreach my $work_object (@work_units) {
+                    push(@new_work_units, $work_object) unless
+                        $work_object eq $package->get_object;
+                }
+                undef(@work_units);
+                foreach (@new_work_units) { push(@work_units, $_); }
 
-			} elsif($package->get_type eq 'new') {
-				#add $package->get_object into @work_units
-				push(@work_units, $package->get_object);
-			}
-		}
-	} else {		#Parent	(consumer)
-		my @results;
-		
-		while(1) {
-			#We are expecting messages from the workers here.
-			#For each worker message, we want to record the result
-			#and inform the producer to spawn another worker.
-			my $package = $Qc->receive;
-			if($package->get_type eq 'res') {
-				push(@results, $package->get_object);
-				#Tell the producer to spawn another worker.
-				$Qp->send(
-		Proc::Swarm::Package->new(undef, 'another'));
-			} elsif($package->get_type eq 'end') {
-				#This is a message from the producer that
-				#it is finished spawning workers.
+            } elsif($package->get_type eq 'new') {
+                #add $package->get_object into @work_units
+                push(@work_units, $package->get_object);
+            }
+        }
+    } else {        #Parent    (consumer)
+        my @results;
+        
+        while(1) {
+            #We are expecting messages from the workers here.
+            #For each worker message, we want to record the result
+            #and inform the producer to spawn another worker.
+            my $package = $Qc->receive;
+            if($package->get_type eq 'res') {
+                push(@results, $package->get_object);
+                #Tell the producer to spawn another worker.
+                $Qp->send(
+        Proc::Swarm::Package->new(undef, 'another'));
+            } elsif($package->get_type eq 'end') {
+                #This is a message from the producer that
+                #it is finished spawning workers.
 
-				#We will only get this message when we are	
-				#sure all of the workers are finished.
-				if(defined($sort_output)) { 
-					@results = _sort_results($sort_code, \@results, \@units);
-				}
-				$Qc->cleanup;
-				$Qp->cleanup;
-				return(Proc::Swarm::Results->new(@results));
-			}
-		}
-	}
+                #We will only get this message when we are    
+                #sure all of the workers are finished.
+                if(defined($sort_output)) { 
+                    @results = _sort_results($sort_code, \@results, \@units);
+                }
+                $Qc->cleanup;
+                $Qp->cleanup;
+                return(Proc::Swarm::Results->new(@results));
+            }
+        }
+    }
 }
 
 sub
 _sort_results {
-	my $sort_code = shift;
-	my $results_ref = shift;
-	my $units_ref = shift;
+    my $sort_code = shift;
+    my $results_ref = shift;
+    my $units_ref = shift;
 
-	my @units = @$units_ref;
-	my @results = @$results_ref;
-	my %sort_hash;
-	{
-		my $i = 0;
-		%sort_hash = map { $units[$i], $i++ } @units;
-	}
+    my @units = @$units_ref;
+    my @results = @$results_ref;
+    my %sort_hash;
+    {
+        my $i = 0;
+        %sort_hash = map { $units[$i], $i++ } @units;
+    }
 
-#	$sort_code = sub { $sort_hash{$a->get_object} 
-#			<=> $sort_hash{$b->get_object} }
-#		unless defined($sort_code);
+#    $sort_code = sub { $sort_hash{$a->get_object} 
+#            <=> $sort_hash{$b->get_object} }
+#        unless defined($sort_code);
 
-	$sort_code = q
-		sub { $sort_hash{$a->get_object}
-			<=> $sort_hash{$b->get_object} };
+    $sort_code = q
+        sub { $sort_hash{$a->get_object}
+            <=> $sort_hash{$b->get_object} };
  unless defined $sort_code;
 
-	$sort_coderef = eval $sort_code;
+    my $sort_coderef = eval $sort_code;
 
-	@results = sort $sort_coderef @results;
-	return(@results);
+    @results = sort $sort_coderef @results;
+    return(@results);
 }
 
 #this function should immediately return.
 sub
 _worker {
-	my $object = shift;
-	my $coderef = shift;
-	my $Qc = shift;
+    my $object = shift;
+    my $coderef = shift;
+    my $Qc = shift;
 
-	#the classic double fork.
-	unless ($pid = fork) {
-		unless (fork) {
-			_worker_worker($object, $coderef, $Qc, $Qp);
-			exit 0;
-		}
-		exit 0;
-	}
-	waitpid($pid,0);
+    my $Qp;
+    my $pid;
+    #the classic double fork.
+    unless ($pid = fork) {
+        unless (fork) {
+            _worker_worker($object, $coderef, $Qc, $Qp);
+            exit 0;
+        }
+        exit 0;
+    }
+    waitpid($pid,0);
 }
 
 sub
 _worker_worker {
-	my $object = shift;
-	my $coderef = shift;
-	my $Qc = shift;
-	my $Qp = shift;
-	my $start = scalar time;
-	my ($retval, $result_type);
+    my $object = shift;
+    my $coderef = shift;
+    my $Qc = shift;
+    my $Qp = shift;
+    my $start = scalar time;
+    my ($retval, $result_type);
 
-	eval {
-		$retval = &$coderef($object); 
-	};
-	if($@) {
-		$result_type = 'error';
-		$retval = $@;
-	} else {
-		$result_type = 'good';
-	}
-	my $end = scalar time; 
-	my $result = Proc::Swarm::Result->new(($end-$start), $object, $retval, $result_type);
-	my $package = Proc::Swarm::Package->new($result, 'res');
+    eval {
+        $retval = &$coderef($object); 
+    };
+    if($@) {
+        $result_type = 'error';
+        $retval = $@;
+    } else {
+        $result_type = 'good';
+    }
+    my $end = scalar time; 
+    my $result = Proc::Swarm::Result->new(($end-$start), $object, $retval, $result_type);
+    my $package = Proc::Swarm::Package->new($result, 'res');
 
-	$Qc->send($package);
+    $Qc->send($package);
 } 
 
 package Proc::Swarm::Package;
 
 sub 
 new {
-	my $proto = shift;
-	my $object = shift;
-	my $type = shift;
+    my $proto = shift;
+    my $object = shift;
+    my $type = shift;
 
 
-	my $class = ref($proto) || $proto;
-	my $self  = {};
-	$self->{'type'} = $type;
-	$self->{'obj'} = $object;
+    my $class = ref($proto) || $proto;
+    my $self  = {};
+    $self->{type} = $type;
+    $self->{obj} = $object;
 
-	bless ($self, $class);
-	return $self;
+    bless ($self, $class);
+    return $self;
 }
 
 sub
 get_type {
-	my $self = shift;
-	return($self->{'type'});
+    my $self = shift;
+    return($self->{type});
 }
 
 sub
 get_object {
-	my $self = shift;
-	return($self->{'obj'});
+    my $self = shift;
+    return($self->{obj});
 }
 package Proc::Swarm::Results;
 
 sub
 new {
-	my $proto = shift;
-	my $class = ref($proto) || $proto;
+    my $proto = shift;
+    my $class = ref($proto) || $proto;
 
-	my @results = @_;
+    my @results = @_;
 
-	my $self  = {};
-	$self->{'results'} = \@results;
-	bless ($self, $class);
-	return $self;
+    my $self  = {};
+    $self->{results} = \@results;
+    bless ($self, $class);
+    return $self;
 }
 
 sub
 get_result_count {
-	my $self = shift;
-	return($self->{'count'}) if defined($self->{'count'});
-	$self->{'count'} = scalar @{$self->{'results'}};
-	return($self->{'count'});
+    my $self = shift;
+    return($self->{count}) if defined($self->{count});
+    $self->{count} = scalar @{$self->{results}};
+    return($self->{count});
 }
 
 sub
 get_result {
-	my $self = shift;
-	my $object_id = shift;
+    my $self = shift;
+    my $object_id = shift;
 
-	foreach my $result (@{$self->{'results'}}) {
-		if($result->get_object eq $object_id) {
-			return($result); 
-		}
-	}
-	return(undef);
+    foreach my $result (@{$self->{results}}) {
+        return $result
+            if $result->get_object eq $object_id;
+    }
+    return undef;
 }
 
 sub
 get_result_objects {
-	my $self = shift;
-	return(@{$self->{'objects'}}) if defined($self->{'objects'});
+    my $self = shift;
+    return(@{$self->{objects}}) if defined($self->{objects});
 
-	my @objects;
-	foreach my $result (@{$self->{'results'}}) {
-		push(@objects, $result->get_result);
-	}
-	$self->{'objects'} = \@objects;
-	return(@objects);
+    my @objects;
+    foreach my $result (@{$self->{results}}) {
+        push(@objects, $result->get_result);
+    }
+    $self->{objects} = \@objects;
+    return @objects;
 }
 
 sub
 get_results {
-	my $self = shift;
-	return(@{$self->{'results'}});
+    my $self = shift;
+    return(@{$self->{results}});
 }
 
 sub
 get_result_times {
-	my $self = shift;
-	
-	return(@{$self->{'times'}}) if defined($self->{'times'});
+    my $self = shift;
+    
+    return(@{$self->{times}}) if defined($self->{times});
 
-	my @times;
-	foreach my $result (@{$self->{'results'}}) {
-		push(@times, $result->get_runtime);
-	}
-	$self->{'times'} = \@times;
-	return(@times);
+    my @times;
+    foreach my $result (@{$self->{results}}) {
+        push(@times, $result->get_runtime);
+    }
+    $self->{times} = \@times;
+    return(@times);
 }
 
 sub
 get_objects {
-	my $self = shift;
+    my $self = shift;
 
-	my @objects;
-	foreach my $result (@{$self->{'results'}}) {
-		push(@objects, $result->get_object);
-	}
+    my @objects;
+    foreach my $result (@{$self->{results}}) {
+        push(@objects, $result->get_object);
+    }
 
-	return(@objects);
+    return(@objects);
 }
 
 package Proc::Swarm::Result;
 
 sub 
 new {
-	my $proto = shift;
-	my $class = ref($proto) || $proto;
+    my $proto = shift;
+    my $class = ref($proto) || $proto;
 
-	my $runtime = shift;
-	my $object = shift;
-	my $result = shift;
-	my $result_type = shift;
+    my $runtime = shift;
+    my $object = shift;
+    my $result = shift;
+    my $result_type = shift;
 
-	my $self  = {};
-	$self->{'runtime'} = $runtime;
-	$self->{'object'} = $object;
-	$self->{'result'} = $result;
-	$self->{'result_type'} = $result_type;
-	bless ($self, $class);
-	return $self;
+    my $self  = {};
+    $self->{runtime} = $runtime;
+    $self->{object} = $object;
+    $self->{result} = $result;
+    $self->{result_type} = $result_type;
+    bless ($self, $class);
+    return $self;
 }
 
 sub
 get_runtime {
-	my $self = shift;
-	return($self->{'runtime'});
+    my $self = shift;
+    return($self->{runtime});
 }
 sub
 get_object {
-	my $self = shift;
-	return($self->{'object'});
+    my $self = shift;
+    return($self->{object});
 }
 sub
 get_result {
-	my $self = shift;
-	return($self->{'result'});
+    my $self = shift;
+    return($self->{result});
 }
 sub
 get_result_type  {
-	my $self = shift;
-	return($self->{'result_type'});
+    my $self = shift;
+    return($self->{result_type});
 }
 
 
@@ -361,45 +365,43 @@ package Proc::Swarm::Queue;
 
 sub 
 new {
-	my $proto = shift;
-	my $class = ref($proto) || $proto;
+    my $proto = shift;
+    my $class = ref($proto) || $proto;
 
-	use IPC::SysV qw(IPC_PRIVATE S_IRWXU);
+    use IPC::SysV qw(IPC_PRIVATE S_IRWXU);
 
-	my $self  = {};
+    my $self  = {};
 
-	$self->{'Q'} = new IPC::Msg(IPC_PRIVATE, S_IRWXU);
+    $self->{Q} = IPC::Msg->new(IPC_PRIVATE, S_IRWXU);
 
-	bless ($self, $class);
-	return $self;
+    bless ($self, $class);
+    return $self;
 }
 
 #We can't define a DESTROY method because this class goes out of scope a
 #number of times before we actually want to remove the queues.
 sub
 cleanup {
-	my $self = shift;
-	$self->{'Q'}->remove;
+    my $self = shift;
+    $self->{Q}->remove;
 }
 
 sub
 send {
-	my $self = shift;
-	my $obj = shift;
-	my $frozen_obj = Storable::freeze($obj);
-	return($self->{'Q'}->snd(1, $frozen_obj));	#Message type '1'
+    my $self = shift;
+    my $obj = shift;
+    my $frozen_obj = Storable::freeze($obj);
+    return $self->{Q}->snd(1, $frozen_obj);    #Message type '1'
 }
 
 sub
 receive {
-	my $self = shift;
-	my $in_buf;
-	$thing = $self->{'Q'}->rcv($in_buf, 102400);	#This grabs any 
-							#message type.
-	my $thawed_thing = Storable::thaw $in_buf;
-	return($thawed_thing);
+    my $self = shift;
+    my $in_buf;
+    my $thing = $self->{Q}->rcv($in_buf, 10240000);#This grabs any message type.
+    my $thawed_thing = Storable::thaw $in_buf;
+    return $thawed_thing;
 }
-
 
 1;
 
@@ -416,34 +418,34 @@ This document describes version 0.5 of Proc::Swarm, released October 30, 2001
 
 =head1 SYNOPSIS
 
-	use Proc::Swarm;
+    use Proc::Swarm;
 
-	my $code = sub {
-		my $arg = shift;
-		sleep($arg);
-		$arg++;
-		return($arg);
-	};
+    my $code = sub {
+        my $arg = shift;
+        sleep($arg);
+        $arg++;
+        return($arg);
+    };
 
-	my $retvals = Proc::Swarm::swarm(
-		{	'code' => $code,	#code to run
-			'children' => 2,	#How many child processes to run parallel
-			'sort' => 1,		#sort the results
-			'work' => [1,5,7,10]});	#List of objects to work on
-	my @results = $retvals->get_result_objects;
-	#@results contain 2, 6, 8 and 11, in numeric order.
+    my $retvals = Proc::Swarm::swarm(
+        {    'code' => $code,    #code to run
+            'children' => 2,    #How many child processes to run parallel
+            'sort' => 1,        #sort the results
+            'work' => [1,5,7,10]});    #List of objects to work on
+    my @results = $retvals->get_result_objects;
+    #@results contain 2, 6, 8 and 11, in numeric order.
 
-	my @run_times = $retvals->get_result_times;
-	#how long each took to run.  Should contain something like 1,5,7 and 10
+    my @run_times = $retvals->get_result_times;
+    #how long each took to run.  Should contain something like 1,5,7 and 10
 
-	my @objects = $retvals->get_objects;
-	#The objects passed in.  Should contain 1,5,7 and 10
+    my @objects = $retvals->get_objects;
+    #The objects passed in.  Should contain 1,5,7 and 10
 
-	my $specific_result = $retvals->get_result(10);	
-	#Get specific result as keyed by passed object: 11 in this case.
+    my $specific_result = $retvals->get_result(10);    
+    #Get specific result as keyed by passed object: 11 in this case.
 
-	my $specific_return_value = $retvals->get_result(5)->get_runtime;
-	#Returns how long it took to run object 5.
+    my $specific_return_value = $retvals->get_result(5)->get_runtime;
+    #Returns how long it took to run object 5.
 
 =head1 DESCRIPTION
 
