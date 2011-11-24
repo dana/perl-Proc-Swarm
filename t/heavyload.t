@@ -11,9 +11,9 @@ print "ok 1\n";
 {   #simple call
     my $code = sub {
         my $arg = shift;
-        sleep(rand(20));
+        sleep rand(20);
         $arg++;
-        return($arg);
+        return $arg;
     };
 
     my $retvals = Proc::Swarm::swarm({

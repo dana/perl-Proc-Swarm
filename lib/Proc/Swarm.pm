@@ -7,8 +7,7 @@ use strict;use warnings;
 use IPC::Msg;
 use Storable;
 
-our $VERSION = '1.0';
-
+$Proc::Swarm::VERSION = '1.0';
 
 sub
 _usage {
@@ -37,7 +36,7 @@ swarm {
     my @work_units = @units;
     _usage('No work defined') if (scalar @work_units) == 0;
 
-    _usage('Invalid code passed') unless ref($coderef) eq 'CODE';
+    _usage('Invalid code passed') unless ref $coderef eq 'CODE';
     _usage('Child count argument must be a non-negative, non-zero integer')
         if $max_children < 1 or $max_children =~ /\./;
     _usage('Work units must not contain a reference')
@@ -94,15 +93,15 @@ swarm {
                 my @work_units_tmp;
                 my @new_work_units;
                 foreach my $work_object (@work_units) {
-                    push(@new_work_units, $work_object) unless
-                        $work_object eq $package->get_object;
+                    push @new_work_units, $work_object
+                        unless $work_object eq $package->get_object;
                 }
-                undef(@work_units);
-                foreach (@new_work_units) { push(@work_units, $_); }
+                undef @work_units;
+                foreach (@new_work_units) { push @work_units, $_; }
 
             } elsif($package->get_type eq 'new') {
                 #add $package->get_object into @work_units
-                push(@work_units, $package->get_object);
+                push @work_units, $package->get_object;
             }
         }
     } else {        #Parent    (consumer)
@@ -114,7 +113,7 @@ swarm {
             #and inform the producer to spawn another worker.
             my $package = $Qc->receive;
             if($package->get_type eq 'res') {
-                push(@results, $package->get_object);
+                push @results, $package->get_object;
                 #Tell the producer to spawn another worker.
                 $Qp->send(
         Proc::Swarm::Package->new(undef, 'another'));
@@ -137,15 +136,12 @@ swarm {
 
 sub
 _sort_results {
-    my $sort_code = shift;
-    my $results_ref = shift;
-    my $units_ref = shift;
+    my ($sort_code,$results_ref,$units_ref) = @_;
 
     my @units = @$units_ref;
     my @results = @$results_ref;
     my %sort_hash;
-    {
-        my $i = 0;
+    {   my $i = 0;
         %sort_hash = map { $units[$i], $i++ } @units;
     }
 
@@ -161,18 +157,15 @@ _sort_results {
     my $sort_coderef = eval $sort_code;
 
     @results = sort $sort_coderef @results;
-    return(@results);
+    return @results;
 }
 
 #this function should immediately return.
 sub
 _worker {
-    my $object = shift;
-    my $coderef = shift;
-    my $Qc = shift;
+    my ($object,$coderef,$Qc) = @_;
 
-    my $Qp;
-    my $pid;
+    my ($Qp,$pid);
     #the classic double fork.
     unless ($pid = fork) {
         unless (fork) {
@@ -186,12 +179,9 @@ _worker {
 
 sub
 _worker_worker {
-    my $object = shift;
-    my $coderef = shift;
-    my $Qc = shift;
-    my $Qp = shift;
+    my ($object,$coderef,$Qc,$Qp) = @_;
     my $start = scalar time;
-    my ($retval, $result_type);
+    my ($retval,$result_type);
 
     eval {
         $retval = &$coderef($object); 
@@ -213,13 +203,11 @@ package Proc::Swarm::Package;
 
 sub 
 new {
-    my $proto = shift;
-    my $object = shift;
-    my $type = shift;
+    my ($proto,$object,$type) = @_;
 
 
     my $class = ref($proto) || $proto;
-    my $self  = {};
+    my $self = {};
     $self->{type} = $type;
     $self->{obj} = $object;
 
@@ -256,9 +244,9 @@ new {
 sub
 get_result_count {
     my $self = shift;
-    return($self->{count}) if defined($self->{count});
+    return $self->{count} if defined $self->{count};
     $self->{count} = scalar @{$self->{results}};
-    return($self->{count});
+    return $self->{count};
 }
 
 sub
@@ -276,11 +264,11 @@ get_result {
 sub
 get_result_objects {
     my $self = shift;
-    return(@{$self->{objects}}) if defined($self->{objects});
+    return @{$self->{objects}} if defined $self->{objects};
 
     my @objects;
     foreach my $result (@{$self->{results}}) {
-        push(@objects, $result->get_result);
+        push @objects, $result->get_result;
     }
     $self->{objects} = \@objects;
     return @objects;
@@ -289,21 +277,21 @@ get_result_objects {
 sub
 get_results {
     my $self = shift;
-    return(@{$self->{results}});
+    return @{$self->{results}};
 }
 
 sub
 get_result_times {
     my $self = shift;
     
-    return(@{$self->{times}}) if defined($self->{times});
+    return @{$self->{times}} if defined $self->{times};
 
     my @times;
     foreach my $result (@{$self->{results}}) {
-        push(@times, $result->get_runtime);
+        push @times, $result->get_runtime;
     }
     $self->{times} = \@times;
-    return(@times);
+    return @times;
 }
 
 sub
@@ -312,10 +300,10 @@ get_objects {
 
     my @objects;
     foreach my $result (@{$self->{results}}) {
-        push(@objects, $result->get_object);
+        push @objects, $result->get_object;
     }
 
-    return(@objects);
+    return @objects;
 }
 
 package Proc::Swarm::Result;
@@ -325,39 +313,31 @@ new {
     my $proto = shift;
     my $class = ref($proto) || $proto;
 
-    my $runtime = shift;
-    my $object = shift;
-    my $result = shift;
-    my $result_type = shift;
-
     my $self  = {};
-    $self->{runtime} = $runtime;
-    $self->{object} = $object;
-    $self->{result} = $result;
-    $self->{result_type} = $result_type;
-    bless ($self, $class);
+    ($self->{runtime},$self->{object},$self->{result},$self->{result_type}) = @_;
+    bless $self, $class;
     return $self;
 }
 
 sub
 get_runtime {
     my $self = shift;
-    return($self->{runtime});
+    return $self->{runtime};
 }
 sub
 get_object {
     my $self = shift;
-    return($self->{object});
+    return $self->{object};
 }
 sub
 get_result {
     my $self = shift;
-    return($self->{result});
+    return $self->{result};
 }
 sub
 get_result_type  {
     my $self = shift;
-    return($self->{result_type});
+    return $self->{result_type};
 }
 
 
@@ -374,7 +354,7 @@ new {
 
     $self->{Q} = IPC::Msg->new(IPC_PRIVATE, S_IRWXU);
 
-    bless ($self, $class);
+    bless $self, $class;
     return $self;
 }
 
@@ -388,8 +368,7 @@ cleanup {
 
 sub
 send {
-    my $self = shift;
-    my $obj = shift;
+    my ($self,$obj) = @_;
     my $frozen_obj = Storable::freeze($obj);
     return $self->{Q}->snd(1, $frozen_obj);    #Message type '1'
 }
@@ -427,11 +406,12 @@ This document describes version 0.5 of Proc::Swarm, released October 30, 2001
         return($arg);
     };
 
-    my $retvals = Proc::Swarm::swarm(
-        {    'code' => $code,    #code to run
-            'children' => 2,    #How many child processes to run parallel
-            'sort' => 1,        #sort the results
-            'work' => [1,5,7,10]});    #List of objects to work on
+    my $retvals = Proc::Swarm::swarm({
+        code     => $code,    #code to run
+        children => 2,    #How many child processes to run parallel
+        sort     => 1,        #sort the results
+        work     => [1,5,7,10]
+    });    #List of objects to work on
     my @results = $retvals->get_result_objects;
     #@results contain 2, 6, 8 and 11, in numeric order.
 
@@ -494,7 +474,7 @@ Make the timing of each run optionally calculated with HiRes.
 
 =head1 AUTHOR
 
-Dana M. Diederich <dana@realms.org>
+Dana M. Diederich <diederich@gmail.com>
 
 =head1 BUGS
 

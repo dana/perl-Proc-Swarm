@@ -11,8 +11,8 @@ print "ok 1\n";
 {    #simple call that generates an error on even numbers
     my $code = sub {
         my $arg = shift;
-        sleep($arg);
-        return($arg);
+        sleep $arg;
+        return $arg;
     };
 
     my $retvals = Proc::Swarm::swarm({

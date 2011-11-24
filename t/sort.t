@@ -8,14 +8,14 @@ use Proc::Swarm;
 
 print "ok 1\n";
 
-{    #simple call
+{   #simple call
     my $code = sub {
         my $arg = shift;
-        select(undef, undef, undef, rand(15));    #sleep rand 5 seconds to
+        select undef, undef, undef, rand(15);   #sleep rand 15 seconds to
                                                 #make sure these come back out
                                                 #of order.
         $arg++;
-        return($arg);
+        return $arg;
     };
 
     my $retvals = Proc::Swarm::swarm({
@@ -40,13 +40,13 @@ print "ok 1\n";
                                                 #make sure these come back out
                                                 #of order.
         $arg++;
-        return($arg);
+        return $arg;
     };
 
     my $retvals = Proc::Swarm::swarm({
         code     => $code,
         children => 8,
-        work => ['b','c','d','e','f','g','a','z','I','_']
+        work     => ['b','c','d','e','f','g','a','z','I','_']
     });
     my @expected_values = ('c','d','e','f','g','h','b','aa','J','1');
     my @unsorted_results = $retvals->get_result_objects;
