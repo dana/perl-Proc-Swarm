@@ -7,8 +7,6 @@ use strict;use warnings;
 use IPC::Msg;
 use Storable;
 
-$Proc::Swarm::VERSION = '1.0';
-
 sub
 _usage {
     print @_ . "\n" if defined @_;
@@ -390,10 +388,6 @@ __END__
 =head1 NAME
 
 Proc::Swarm - intelligently handle massive multi-processing on one machine
-
-=head1 VERSION
-
-This document describes version 0.5 of Proc::Swarm, released October 30, 2001
 
 =head1 SYNOPSIS
 
