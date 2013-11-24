@@ -7,24 +7,22 @@ use strict;use warnings;
 use IPC::Msg;
 use Storable;
 
-sub
-_usage {
+sub _usage {
     print @_ . "\n" if defined @_;
-    print q
+    print q(
 Proc::Swarm::swarm(
     code     => $coderef,
     children => $child_count,
     work     => \@work_units,
     [sort => 1],
     [debug => 1] );
-;
+);
     exit 255;
 }
 
-sub
-swarm {
+sub swarm {
     my $args = shift;
-    _usage() if ref($args) ne 'HASH';
+    _usage() if ref $args ne 'HASH';
     my $coderef = $args->{code};
     my $max_children = $args->{children};
     my @units = @{$args->{work}};
@@ -51,14 +49,14 @@ swarm {
     #The main parent is the consumer.  It will exit last.
     #The first child is the producer.
     my $pid = fork();
-    if(!defined($pid)) {    #fork failed
+    if(not defined $pid) {    #fork failed
         die 'Fork failed.  Check your system resources.';
-    } elsif(!$pid) {    #Child    (producer)
+    } elsif(not $pid) {    #Child    (producer)
         my $worker_count = 0;
         my $another_count = 0;
         #first we spin off enough children to max out the count.
         for (1..$max_children) {
-            _worker(pop(@work_units), $coderef, $Qc);
+            _worker(pop @work_units, $coderef, $Qc);
             $worker_count++;
         }
 
@@ -75,9 +73,7 @@ swarm {
                 $another_count++;
                 if($another_count == $worker_count) {
                     #We are now done.
-                    $Qc->send(
-                        Proc::Swarm::Package->new(undef, 'end')
-                    );
+                    $Qc->send(Proc::Swarm::Package->new(undef, 'end'));
                     exit;
                 }
         
@@ -126,14 +122,13 @@ swarm {
                 }
                 $Qc->cleanup;
                 $Qp->cleanup;
-                return(Proc::Swarm::Results->new(@results));
+                return Proc::Swarm::Results->new(@results);
             }
         }
     }
 }
 
-sub
-_sort_results {
+sub _sort_results {
     my ($sort_code,$results_ref,$units_ref) = @_;
 
     my @units = @$units_ref;
@@ -143,14 +138,12 @@ _sort_results {
         %sort_hash = map { $units[$i], $i++ } @units;
     }
 
-#    $sort_code = sub { $sort_hash{$a->get_object} 
-#            <=> $sort_hash{$b->get_object} }
-#        unless defined($sort_code);
-
-    $sort_code = q
-        sub { $sort_hash{$a->get_object}
-            <=> $sort_hash{$b->get_object} };
- unless defined $sort_code;
+    $sort_code = q(
+        sub {   $sort_hash{$a->get_object}
+                <=>
+                $sort_hash{$b->get_object}
+        };
+    ) unless defined $sort_code;
 
     my $sort_coderef = eval $sort_code;
 
@@ -159,8 +152,7 @@ _sort_results {
 }
 
 #this function should immediately return.
-sub
-_worker {
+sub _worker {
     my ($object,$coderef,$Qc) = @_;
 
     my ($Qp,$pid);
@@ -172,11 +164,10 @@ _worker {
         }
         exit 0;
     }
-    waitpid($pid,0);
+    waitpid $pid,0;
 }
 
-sub
-_worker_worker {
+sub _worker_worker {
     my ($object,$coderef,$Qc,$Qp) = @_;
     my $start = scalar time;
     my ($retval,$result_type);
@@ -199,8 +190,7 @@ _worker_worker {
 
 package Proc::Swarm::Package;
 
-sub 
-new {
+sub new {
     my ($proto,$object,$type) = @_;
 
 
@@ -209,25 +199,22 @@ new {
     $self->{type} = $type;
     $self->{obj} = $object;
 
-    bless ($self, $class);
+    bless $self, $class;
     return $self;
 }
 
-sub
-get_type {
+sub get_type {
     my $self = shift;
-    return($self->{type});
+    return $self->{type};
 }
 
-sub
-get_object {
+sub get_object {
     my $self = shift;
-    return($self->{obj});
+    return $self->{obj};
 }
 package Proc::Swarm::Results;
 
-sub
-new {
+sub new {
     my $proto = shift;
     my $class = ref($proto) || $proto;
 
@@ -235,20 +222,18 @@ new {
 
     my $self  = {};
     $self->{results} = \@results;
-    bless ($self, $class);
+    bless $self, $class;
     return $self;
 }
 
-sub
-get_result_count {
+sub get_result_count {
     my $self = shift;
     return $self->{count} if defined $self->{count};
     $self->{count} = scalar @{$self->{results}};
     return $self->{count};
 }
 
-sub
-get_result {
+sub get_result {
     my $self = shift;
     my $object_id = shift;
 
@@ -259,8 +244,7 @@ get_result {
     return undef;
 }
 
-sub
-get_result_objects {
+sub get_result_objects {
     my $self = shift;
     return @{$self->{objects}} if defined $self->{objects};
 
@@ -272,14 +256,12 @@ get_result_objects {
     return @objects;
 }
 
-sub
-get_results {
+sub get_results {
     my $self = shift;
     return @{$self->{results}};
 }
 
-sub
-get_result_times {
+sub get_result_times {
     my $self = shift;
     
     return @{$self->{times}} if defined $self->{times};
@@ -292,8 +274,7 @@ get_result_times {
     return @times;
 }
 
-sub
-get_objects {
+sub get_objects {
     my $self = shift;
 
     my @objects;
@@ -306,19 +287,20 @@ get_objects {
 
 package Proc::Swarm::Result;
 
-sub 
-new {
+sub new {
     my $proto = shift;
     my $class = ref($proto) || $proto;
 
     my $self  = {};
-    ($self->{runtime},$self->{object},$self->{result},$self->{result_type}) = @_;
+    (   $self->{runtime},
+        $self->{object},
+        $self->{result},$self->{result_type}
+    ) = @_;
     bless $self, $class;
     return $self;
 }
 
-sub
-get_runtime {
+sub get_runtime {
     my $self = shift;
     return $self->{runtime};
 }
@@ -327,13 +309,13 @@ get_object {
     my $self = shift;
     return $self->{object};
 }
-sub
-get_result {
+
+sub get_result {
     my $self = shift;
     return $self->{result};
 }
-sub
-get_result_type  {
+
+sub get_result_type  {
     my $self = shift;
     return $self->{result_type};
 }
@@ -341,8 +323,7 @@ get_result_type  {
 
 package Proc::Swarm::Queue;
 
-sub 
-new {
+sub new {
     my $proto = shift;
     my $class = ref($proto) || $proto;
 
@@ -358,21 +339,18 @@ new {
 
 #We can't define a DESTROY method because this class goes out of scope a
 #number of times before we actually want to remove the queues.
-sub
-cleanup {
+sub cleanup {
     my $self = shift;
     $self->{Q}->remove;
 }
 
-sub
-send {
+sub send {
     my ($self,$obj) = @_;
     my $frozen_obj = Storable::freeze($obj);
     return $self->{Q}->snd(1, $frozen_obj);    #Message type '1'
 }
 
-sub
-receive {
+sub receive {
     my $self = shift;
     my $in_buf;
     my $thing = $self->{Q}->rcv($in_buf, 10240000);#This grabs any message type.
@@ -395,15 +373,15 @@ Proc::Swarm - intelligently handle massive multi-processing on one machine
 
     my $code = sub {
         my $arg = shift;
-        sleep($arg);
+        sleep $arg;
         $arg++;
-        return($arg);
+        return $arg;
     };
 
     my $retvals = Proc::Swarm::swarm({
-        code     => $code,    #code to run
-        children => 2,    #How many child processes to run parallel
-        sort     => 1,        #sort the results
+        code     => $code,  #code to run
+        children => 2,      #How many child processes to run parallel
+        sort     => 1,      #sort the results
         work     => [1,5,7,10]
     });    #List of objects to work on
     my @results = $retvals->get_result_objects;
@@ -483,7 +461,7 @@ intensive.  While not a bug, this can be rather alarming.
 
 =head1 COPYRIGHT
 
-Copyright (c) 2001, Dana M. Diederich. All Rights Reserved.
+Copyright (c) 2001, 2013 Dana M. Diederich. All Rights Reserved.
 This module is free software. It may be used, redistributed
 and/or modified under the terms of the Perl Artistic License
   (see http://www.perl.com/perl/misc/Artistic.html)

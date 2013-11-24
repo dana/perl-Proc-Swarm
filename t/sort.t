@@ -36,7 +36,7 @@ print "ok 1\n";
 {   #Same test, but un-sorted to make sure we come back OUT of order
     my $code = sub {
         my $arg = shift;
-        select(undef, undef, undef, rand(5));   #sleep rand 5 seconds to
+        select undef, undef, undef, rand(5);   #sleep rand 5 seconds to
                                                 #make sure these come back out
                                                 #of order.
         $arg++;

@@ -8,15 +8,15 @@ Proc::Swarm - intelligently handle massive multi-processing on one machine
 
     my $code = sub {
         my $arg = shift;
-        sleep($arg);
+        sleep $arg;
         $arg++;
-        return($arg);
+        return $arg;
     };
 
     my $retvals = Proc::Swarm::swarm({
-        code     => $code,    #code to run
-        children => 2,    #How many child processes to run parallel
-        sort     => 1,        #sort the results
+        code     => $code,  #code to run
+        children => 2,      #How many child processes to run parallel
+        sort     => 1,      #sort the results
         work     => [1,5,7,10]
     });    #List of objects to work on
     my @results = $retvals->get_result_objects;
@@ -96,7 +96,7 @@ intensive.  While not a bug, this can be rather alarming.
 
 # COPYRIGHT
 
-Copyright (c) 2001, Dana M. Diederich. All Rights Reserved.
+Copyright (c) 2001, 2013 Dana M. Diederich. All Rights Reserved.
 This module is free software. It may be used, redistributed
 and/or modified under the terms of the Perl Artistic License
   (see http://www.perl.com/perl/misc/Artistic.html)
