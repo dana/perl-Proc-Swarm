@@ -1,4 +1,5 @@
-{{$NEXT}}
+{{$NEXT}} Sun Nov 24 12:02:45 PST 2013
+    - Code format tweaks; no functional changes
 
 1.132270  2013-08-14 18:33:37 PST8PDT
     - Moving to Dist::Zilla
