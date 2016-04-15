@@ -1,4 +1,6 @@
-{{$NEXT}} 
+{{$NEXT}}
+
+1.161060  2016-04-15 16:14:02-07:00 America/Los_Angeles 
     - Make it work on Perl 5.22
     - Modernize the tests
 
