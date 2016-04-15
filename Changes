@@ -1,4 +1,4 @@
-{{$NEXT}} Fri Apr 15 16:10:03 PDT 2016
+{{$NEXT}} 
     - Make it work on Perl 5.22
     - Modernize the tests
 
