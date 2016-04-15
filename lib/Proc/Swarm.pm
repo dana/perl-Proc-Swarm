@@ -8,7 +8,7 @@ use IPC::Msg;
 use Storable;
 
 sub _usage {
-    print @_ . "\n" if defined @_;
+    print @_ . "\n" if @_;
     print q(
 Proc::Swarm::swarm(
     code     => $coderef,
