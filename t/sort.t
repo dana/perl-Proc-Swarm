@@ -3,7 +3,7 @@
 use lib '../lib';
 
 BEGIN { print "1..3\n"; }
-use strict;
+use strict;use warnings;
 use Proc::Swarm;
 
 print "ok 1\n";
