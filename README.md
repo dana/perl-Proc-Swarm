@@ -100,3 +100,4 @@ Copyright (c) 2001, 2013, 2016 Dana M. Diederich. All Rights Reserved.
 This module is free software. It may be used, redistributed
 and/or modified under the terms of the Perl Artistic License
   (see http://www.perl.com/perl/misc/Artistic.html)
+
